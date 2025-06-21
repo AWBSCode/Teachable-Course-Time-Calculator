@@ -110,6 +110,7 @@
         .button:disabled {
             opacity: 0.5;
             cursor: not-allowed;
+            transform: none;
         }
         
         .loading {
@@ -136,7 +137,7 @@
         }
         
         .course-list {
-            max-height: 200px;
+            max-height: 300px;
             overflow-y: auto;
             overflow-x: hidden;
             margin-top: 10px;
@@ -166,6 +167,7 @@
         
         .section-info {
             flex-grow: 1;
+            min-width: 0; /* Allow text to truncate */
         }
         
         .section-controls {
@@ -205,11 +207,13 @@
             font-weight: bold;
             font-size: 13px;
             margin-bottom: 5px;
+            word-wrap: break-word;
         }
         
         .lesson-count {
             font-size: 11px;
             opacity: 0.7;
+            word-wrap: break-word;
         }
         
         .section-progress {
@@ -219,10 +223,125 @@
             margin-top: 2px;
         }
         
+        .target-card {
+            background: rgba(255, 255, 255, 0.08);
+            border-radius: 10px;
+            padding: 12px;
+            margin-bottom: 15px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+        }
+        
+        .target-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        
+        .target-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: #ffeb3b;
+        }
+        
+        .target-toggle {
+            background: rgba(255, 255, 255, 0.2);
+            border: none;
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 10px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        
+        .target-toggle:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+        
+        .target-input-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+        
+        .target-input {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            border-radius: 4px;
+            padding: 6px 8px;
+            color: white;
+            font-size: 12px;
+            width: 60px;
+            text-align: center;
+        }
+        
+        .target-input:focus {
+            outline: none;
+            border-color: #ffeb3b;
+            background: rgba(255, 255, 255, 0.15);
+        }
+        
+        .target-input::placeholder {
+            color: rgba(255, 255, 255, 0.5);
+        }
+        
+        .target-label {
+            font-size: 12px;
+            opacity: 0.9;
+        }
+        
+        .target-results {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            margin-top: 8px;
+        }
+        
+        .target-result {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 6px 8px;
+            border-radius: 4px;
+            text-align: center;
+        }
+        
+        .target-result-label {
+            font-size: 9px;
+            opacity: 0.7;
+            margin-bottom: 2px;
+        }
+        
+        .target-result-value {
+            font-size: 12px;
+            font-weight: bold;
+            color: #ffeb3b;
+        }
+        
+        .target-result-value.completion {
+            color: #4caf50;
+        }
+        
+        .target-result-value.daily {
+            color: #ff9800;
+        }
+        
+        .target-settings {
+            display: none;
+            animation: slideDown 0.3s ease;
+        }
+        
+        .target-settings.expanded {
+            display: block;
+        }
+        
         .expand-icon {
             font-size: 12px;
             transition: transform 0.3s ease;
             opacity: 0.7;
+            cursor: pointer;
+            user-select: none;
         }
         
         .expand-icon.expanded {
@@ -234,11 +353,14 @@
             padding-left: 15px;
             border-left: 2px solid rgba(255, 255, 255, 0.1);
             display: none;
-            animation: slideDown 0.3s ease;
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease;
         }
         
         .lessons-list.expanded {
             display: block;
+            max-height: 400px;
         }
         
         .lesson-item {
@@ -271,6 +393,8 @@
         .lesson-title {
             flex-grow: 1;
             line-height: 1.3;
+            word-wrap: break-word;
+            min-width: 0;
         }
         
         @keyframes slideDown {
@@ -282,6 +406,29 @@
                 opacity: 1;
                 max-height: 300px;
             }
+        }
+        
+        /* Scrollbar styling */
+        .course-list::-webkit-scrollbar,
+        .lessons-list::-webkit-scrollbar {
+            width: 6px;
+        }
+        
+        .course-list::-webkit-scrollbar-track,
+        .lessons-list::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 3px;
+        }
+        
+        .course-list::-webkit-scrollbar-thumb,
+        .lessons-list::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.3);
+            border-radius: 3px;
+        }
+        
+        .course-list::-webkit-scrollbar-thumb:hover,
+        .lessons-list::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.5);
         }
     </style>
 </head>
@@ -329,6 +476,39 @@
             <div class="stat-row">
                 <span class="stat-label">Progress:</span>
                 <span class="stat-value" id="progressPercent">0%</span>
+            </div>
+        </div>
+        
+        <div id="targetCard" class="target-card" style="display: none;">
+            <div class="target-header">
+                <div class="target-title">🎯 Daily Target</div>
+                <button id="targetToggle" class="target-toggle">⚙️ Settings</button>
+            </div>
+            
+            <div id="targetSettings" class="target-settings">
+                <div class="target-input-group">
+                    <input type="number" id="dailyTargetInput" class="target-input" placeholder="30" min="1" max="1440">
+                    <span class="target-label">minutes per day</span>
+                </div>
+            </div>
+            
+            <div id="targetResults" class="target-results">
+                <div class="target-result">
+                    <div class="target-result-label">Days to Complete</div>
+                    <div class="target-result-value completion" id="daysToComplete">-</div>
+                </div>
+                <div class="target-result">
+                    <div class="target-result-label">Daily Needed</div>
+                    <div class="target-result-value daily" id="dailyNeeded">-</div>
+                </div>
+                <div class="target-result">
+                    <div class="target-result-label">Weekly Hours</div>
+                    <div class="target-result-value" id="weeklyHours">-</div>
+                </div>
+                <div class="target-result">
+                    <div class="target-result-label">Completion Date</div>
+                    <div class="target-result-value" id="completionDate">-</div>
+                </div>
             </div>
         </div>
         

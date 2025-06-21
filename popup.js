@@ -1,12 +1,35 @@
 function showSuccess(message) {
+    // Remove existing success/error messages
+    const existingMessages = document.querySelectorAll('.success, .error');
+    existingMessages.forEach(msg => msg.remove());
+    
     const successDiv = document.createElement('div');
     successDiv.className = 'success';
     successDiv.textContent = message;
     document.getElementById('content').appendChild(successDiv);
     
     setTimeout(() => {
-        successDiv.remove();
+        if (successDiv.parentNode) {
+            successDiv.remove();
+        }
     }, 3000);
+}
+
+function showError(message) {
+    // Remove existing success/error messages
+    const existingMessages = document.querySelectorAll('.success, .error');
+    existingMessages.forEach(msg => msg.remove());
+    
+    const errorDiv = document.createElement('div');
+    errorDiv.className = 'error';
+    errorDiv.textContent = message;
+    document.getElementById('content').appendChild(errorDiv);
+    
+    setTimeout(() => {
+        if (errorDiv.parentNode) {
+            errorDiv.remove();
+        }
+    }, 5000);
 }
 
 document.addEventListener('DOMContentLoaded', function() {
@@ -14,19 +37,128 @@ document.addEventListener('DOMContentLoaded', function() {
     const exportBtn = document.getElementById('exportBtn');
     const statsDiv = document.getElementById('stats');
     const courseDetailsDiv = document.getElementById('courseDetails');
+    const targetCard = document.getElementById('targetCard');
+    const targetToggle = document.getElementById('targetToggle');
+    const targetSettings = document.getElementById('targetSettings');
+    const dailyTargetInput = document.getElementById('dailyTargetInput');
     
     let courseData = null;
+    let dailyTarget = 30; // Default 30 minutes per day
     
+    // Check if chrome.storage is available
+    if (typeof chrome !== 'undefined' && chrome.storage) {
+        // Load saved daily target
+        chrome.storage.local.get(['dailyTarget']).then(function(result) {
+            if (result.dailyTarget) {
+                dailyTarget = result.dailyTarget;
+                dailyTargetInput.value = dailyTarget;
+            }
+        }).catch(function(error) {
+            console.warn('Could not load daily target from storage:', error);
+        });
+    }
+    
+    // Event listeners
     analyzeBtn.addEventListener('click', analyzeCourse);
     exportBtn.addEventListener('click', exportCourseData);
+    targetToggle.addEventListener('click', toggleTargetSettings);
+    dailyTargetInput.addEventListener('input', updateDailyTarget);
+    dailyTargetInput.addEventListener('change', updateDailyTarget);
+    
+    function toggleTargetSettings() {
+        const isExpanded = targetSettings.classList.contains('expanded');
+        
+        if (isExpanded) {
+            targetSettings.classList.remove('expanded');
+            targetToggle.textContent = '⚙️ Settings';
+        } else {
+            targetSettings.classList.add('expanded');
+            targetToggle.textContent = '✖️ Close';
+        }
+    }
+    
+    function updateDailyTarget() {
+        const newTarget = parseInt(dailyTargetInput.value) || 30;
+        dailyTarget = Math.max(1, Math.min(1440, newTarget)); // Between 1 and 1440 minutes
+        
+        // Update input if value was clamped
+        if (dailyTargetInput.value != dailyTarget) {
+            dailyTargetInput.value = dailyTarget;
+        }
+        
+        // Save to storage if available
+        if (typeof chrome !== 'undefined' && chrome.storage) {
+            chrome.storage.local.set({dailyTarget: dailyTarget}).catch(function(error) {
+                console.warn('Could not save daily target to storage:', error);
+            });
+        }
+        
+        // Update calculations if course data exists
+        if (courseData) {
+            updateTargetCalculations();
+        }
+    }
+    
+    function updateTargetCalculations() {
+        if (!courseData) return;
+        
+        // Calculate remaining time
+        let completedTime = 0;
+        courseData.sections.forEach(section => {
+            section.lessons.forEach(lesson => {
+                if (lesson.isComplete) {
+                    completedTime += lesson.duration;
+                }
+            });
+        });
+        
+        const remainingTime = Math.max(0, courseData.totalTimeMinutes - completedTime);
+        
+        if (remainingTime <= 0) {
+            document.getElementById('daysToComplete').textContent = '0';
+            document.getElementById('dailyNeeded').textContent = '0 min';
+            document.getElementById('weeklyHours').textContent = '0h';
+            document.getElementById('completionDate').textContent = 'Complete!';
+            return;
+        }
+        
+        // Calculate days to complete based on daily target
+        const daysToComplete = Math.ceil(remainingTime / dailyTarget);
+        
+        // Calculate weekly hours
+        const weeklyHours = (dailyTarget * 7) / 60;
+        
+        // Calculate completion date
+        const completionDate = new Date();
+        completionDate.setDate(completionDate.getDate() + daysToComplete);
+        
+        // Update UI
+        document.getElementById('daysToComplete').textContent = daysToComplete;
+        document.getElementById('dailyNeeded').textContent = `${Math.ceil(remainingTime / daysToComplete)} min`;
+        document.getElementById('weeklyHours').textContent = `${weeklyHours.toFixed(1)}h`;
+        document.getElementById('completionDate').textContent = completionDate.toLocaleDateString();
+    }
     
     async function analyzeCourse() {
         try {
             analyzeBtn.textContent = '🔄 Analyzing...';
             analyzeBtn.disabled = true;
             
+            // Check if chrome APIs are available
+            if (typeof chrome === 'undefined' || !chrome.tabs || !chrome.scripting) {
+                throw new Error('Chrome extension APIs not available');
+            }
+            
             // Get the active tab
-            const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+            const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+            if (!tabs || tabs.length === 0) {
+                throw new Error('No active tab found');
+            }
+            
+            const tab = tabs[0];
+            if (!tab.url || (!tab.url.includes('programmingadvices.com/courses'))) {
+                throw new Error('Please navigate to a Teachable course page first');
+            }
             
             // Execute the content script
             const results = await chrome.scripting.executeScript({
@@ -34,16 +166,24 @@ document.addEventListener('DOMContentLoaded', function() {
                 function: extractCourseData
             });
             
+            if (!results || results.length === 0) {
+                throw new Error('No results returned from content script');
+            }
+            
             courseData = results[0].result;
             
+            if (!courseData) {
+                throw new Error('No data returned from page analysis');
+            }
+            
             if (courseData.error) {
-                showError(courseData.error);
-                return;
+                throw new Error(courseData.error);
             }
             
             displayResults(courseData);
             
         } catch (error) {
+            console.error('Analysis error:', error);
             showError('Failed to analyze course: ' + error.message);
         } finally {
             analyzeBtn.textContent = '🔍 Analyze Course';
@@ -52,29 +192,36 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     function displayResults(data) {
+        if (!data || !data.sections) {
+            showError('Invalid course data received');
+            return;
+        }
+        
         // Calculate completed and remaining time
         let completedTime = 0;
         let completedLessons = 0;
         
         data.sections.forEach(section => {
-            section.lessons.forEach(lesson => {
-                if (lesson.isComplete) {
-                    completedLessons++;
-                    completedTime += lesson.duration;
-                }
-            });
+            if (section.lessons) {
+                section.lessons.forEach(lesson => {
+                    if (lesson.isComplete) {
+                        completedLessons++;
+                        completedTime += lesson.duration || 0;
+                    }
+                });
+            }
         });
         
-        const remainingTime = data.totalTimeMinutes - completedTime;
+        const remainingTime = Math.max(0, data.totalTimeMinutes - completedTime);
         const progressPercent = data.totalTimeMinutes > 0 ? 
             Math.round((completedTime / data.totalTimeMinutes) * 100) : 0;
         
         // Update stats
         document.getElementById('sectionCount').textContent = data.sections.length;
-        document.getElementById('lessonCount').textContent = data.totalLessons;
+        document.getElementById('lessonCount').textContent = data.totalLessons || 0;
         document.getElementById('completedLessonCount').textContent = completedLessons;
-        document.getElementById('timedLessonCount').textContent = data.timedLessons;
-        document.getElementById('totalTime').textContent = formatTime(Math.round(data.totalTimeMinutes));
+        document.getElementById('timedLessonCount').textContent = data.timedLessons || 0;
+        document.getElementById('totalTime').textContent = formatTime(Math.round(data.totalTimeMinutes || 0));
         document.getElementById('completedTime').textContent = formatTime(Math.round(completedTime));
         document.getElementById('remainingTime').textContent = formatTime(Math.round(remainingTime));
         document.getElementById('progressPercent').textContent = `${progressPercent}%`;
@@ -86,20 +233,40 @@ document.addEventListener('DOMContentLoaded', function() {
         // Show stats card
         statsDiv.style.display = 'block';
         
+        // Show and update target card
+        targetCard.style.display = 'block';
+        updateTargetCalculations();
+        
         // Display course details with expandable sections
+        displayCourseDetails(data);
+        
+        exportBtn.style.display = 'block';
+        
+        const timingInfo = data.timedLessons < data.totalLessons ? 
+            ` (${data.totalLessons - data.timedLessons} lessons without timing)` : '';
+        const progressInfo = completedLessons > 0 ? 
+            ` • ${completedLessons} completed (${progressPercent}%)` : '';
+        showSuccess(`Found ${data.sections.length} sections with ${data.totalLessons} lessons${timingInfo}${progressInfo}!`);
+    }
+    
+    function displayCourseDetails(data) {
         let detailsHTML = '';
+        
         data.sections.forEach((section, sectionIndex) => {
+            if (!section.lessons) return;
+            
             const sectionCompletedLessons = section.lessons.filter(lesson => lesson.isComplete).length;
-            const timedLessons = section.lessons.filter(lesson => lesson.duration > 0).length;
+            const timedLessons = section.lessons.filter(lesson => (lesson.duration || 0) > 0).length;
             const sectionCompletedTime = section.lessons
                 .filter(lesson => lesson.isComplete)
-                .reduce((sum, lesson) => sum + lesson.duration, 0);
-            const sectionRemainingTime = section.actualTime - sectionCompletedTime;
-            const sectionProgress = section.actualTime > 0 ? 
-                Math.round((sectionCompletedTime / section.actualTime) * 100) : 0;
+                .reduce((sum, lesson) => sum + (lesson.duration || 0), 0);
+            const sectionTotalTime = section.actualTime || 0;
+            const sectionRemainingTime = Math.max(0, sectionTotalTime - sectionCompletedTime);
+            const sectionProgress = sectionTotalTime > 0 ? 
+                Math.round((sectionCompletedTime / sectionTotalTime) * 100) : 0;
             
             const progressText = sectionCompletedLessons > 0 ? ` • ${sectionCompletedLessons}/${section.lessons.length} completed` : '';
-            const timeText = section.actualTime > 0 ? formatTime(Math.round(section.actualTime)) : 'No timing info';
+            const timeText = sectionTotalTime > 0 ? formatTime(Math.round(sectionTotalTime)) : 'No timing info';
             const completedTimeText = sectionCompletedTime > 0 ? ` • ✅ ${formatTime(Math.round(sectionCompletedTime))}` : '';
             const remainingTimeText = sectionRemainingTime > 0 ? ` • ⏳ ${formatTime(Math.round(sectionRemainingTime))}` : '';
             
@@ -107,15 +274,15 @@ document.addEventListener('DOMContentLoaded', function() {
                 <div class="section-item" data-section-index="${sectionIndex}">
                     <div class="section-header">
                         <div class="section-info">
-                            <div class="section-title">${section.title}</div>
+                            <div class="section-title">${section.title || 'Untitled Section'}</div>
                             <div class="lesson-count">${section.lessons.length} lessons (${timedLessons} timed) • ${timeText}${progressText}</div>
                             ${sectionCompletedTime > 0 || sectionRemainingTime > 0 ? 
                                 `<div class="section-progress">${sectionProgress}% complete${completedTimeText}${remainingTimeText}</div>` : 
                                 ''}
                         </div>
                         <div class="section-controls">
-                            <button class="section-btn" onclick="copySectionData(${sectionIndex})" title="Copy section with details">📋 Data</button>
-                            <button class="section-btn" onclick="copySectionTitles(${sectionIndex})" title="Copy lesson titles only">📝 Titles</button>
+                            <button class="section-btn" data-action="copy-data" data-section="${sectionIndex}" title="Copy section with details">📋 Data</button>
+                            <button class="section-btn" data-action="copy-titles" data-section="${sectionIndex}" title="Copy lesson titles only">📝 Titles</button>
                             <div class="expand-icon">▶</div>
                         </div>
                     </div>
@@ -123,10 +290,10 @@ document.addEventListener('DOMContentLoaded', function() {
                         ${section.lessons.map(lesson => `
                             <div class="lesson-item">
                                 <div class="lesson-status ${lesson.isComplete ? 'completed' : 'incomplete'}"></div>
-                                <div class="lesson-title">${lesson.title}${lesson.duration > 0 ? ` <span style="opacity: 0.7; font-size: 10px;">(${formatTime(Math.round(lesson.duration))})</span>` : ''}</div>
+                                <div class="lesson-title">${lesson.title || 'Untitled Lesson'}${(lesson.duration || 0) > 0 ? ` <span style="opacity: 0.7; font-size: 10px;">(${formatTime(Math.round(lesson.duration))})</span>` : ''}</div>
                             </div>
                         `).join('')}
-                    </div>
+                        </div>
                 </div>
             `;
         });
@@ -202,6 +369,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const remainingTime = courseData.totalTimeMinutes - completedTime;
         const progressPercent = courseData.totalTimeMinutes > 0 ? 
             Math.round((completedTime / courseData.totalTimeMinutes) * 100) : 0;
+        const daysToComplete = remainingTime > 0 ? Math.ceil(remainingTime / dailyTarget) : 0;
         
         let exportText = `Course Analysis Report\n`;
         exportText += `========================\n\n`;
@@ -213,6 +381,8 @@ document.addEventListener('DOMContentLoaded', function() {
         exportText += `Completed Time: ${formatTime(Math.round(completedTime))}\n`;
         exportText += `Remaining Time: ${formatTime(Math.round(remainingTime))}\n`;
         exportText += `Progress: ${progressPercent}%\n`;
+        exportText += `Daily Target: ${dailyTarget} minutes\n`;
+        exportText += `Estimated Days to Complete: ${daysToComplete}\n`;
         exportText += `Lessons Without Timing: ${courseData.totalLessons - courseData.timedLessons}\n\n`;
         
         exportText += `Section Details:\n`;
