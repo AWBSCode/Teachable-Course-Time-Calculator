@@ -14,17 +14,7 @@ A Microsoft Edge extension that analyzes Teachable course pages to extract cours
 ## Installation
 
 1. Download all the extension files:
-   - `manifest.json`
-   - `popup.html`
-   - `popup.js`
-   - `content.js`
-
-2. Create extension icons (optional):
-   - `icon16.png` (16x16 pixels)
-   - `icon48.png` (48x48 pixels) 
-   - `icon128.png` (128x128 pixels)
-
-3. Load the extension in Microsoft Edge:
+2. Load the extension in Microsoft Edge:
    - Open Edge and go to `edge://extensions/`
    - Enable "Developer mode"
    - Click "Load unpacked"
@@ -32,7 +22,7 @@ A Microsoft Edge extension that analyzes Teachable course pages to extract cours
 
 ## Usage
 
-1. Navigate to any Teachable course page where you're enrolled
+1. Navigate to any Programming Advices course page where you're enrolled
 2. Click the Teachable Course Timer extension icon in your toolbar
 3. Click "🔍 Analyze Course" to extract course data
 4. View the results:
@@ -91,9 +81,7 @@ teachable-course-timer/
 
 ## Supported Platforms
 
-- Teachable.com courses
-- Thinkific.com courses (experimental)
-- Custom Teachable-powered platforms
+- ProgrammingAdvices.com courses
 
 ## Troubleshooting
 
