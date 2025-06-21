@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <style>
+        body {
+            width: 400px;
+            padding: 20px;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            margin: 0;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        
+        .header h1 {
+            margin: 0 0 5px 0;
+            font-size: 20px;
+            font-weight: 600;
+        }
+        
+        .header p {
+            margin: 0;
+            opacity: 0.8;
+            font-size: 12px;
+        }
+        
+        .stats-card {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            padding: 15px;
+            margin-bottom: 15px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        
+        .stat-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+        
+        .stat-row:last-child {
+            margin-bottom: 0;
+        }
+        
+        .stat-label {
+            font-size: 14px;
+            opacity: 0.9;
+        }
+        
+        .stat-value {
+            font-weight: bold;
+            font-size: 16px;
+        }
+        
+        .total-time {
+            font-size: 18px;
+            color: #ffeb3b;
+        }
+        
+        .button {
+            width: 100%;
+            padding: 12px;
+            background: rgba(255, 255, 255, 0.2);
+            border: none;
+            border-radius: 8px;
+            color: white;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-bottom: 10px;
+        }
+        
+        .button:hover {
+            background: rgba(255, 255, 255, 0.3);
+            transform: translateY(-1px);
+        }
+        
+        .button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        .loading {
+            text-align: center;
+            opacity: 0.8;
+        }
+        
+        .error {
+            background: rgba(244, 67, 54, 0.2);
+            border: 1px solid rgba(244, 67, 54, 0.5);
+            padding: 10px;
+            border-radius: 8px;
+            font-size: 12px;
+            margin-top: 10px;
+        }
+        
+        .success {
+            background: rgba(76, 175, 80, 0.2);
+            border: 1px solid rgba(76, 175, 80, 0.5);
+            padding: 10px;
+            border-radius: 8px;
+            font-size: 12px;
+            margin-top: 10px;
+        }
+        
+        .course-list {
+            max-height: 200px;
+            overflow-y: auto;
+            margin-top: 10px;
+        }
+        
+        .section-item {
+            background: rgba(255, 255, 255, 0.05);
+            margin: 5px 0;
+            padding: 8px;
+            border-radius: 6px;
+            border-left: 3px solid #4fc3f7;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .section-item:hover {
+            background: rgba(255, 255, 255, 0.1);
+            transform: translateX(2px);
+        }
+        
+        .section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .section-title {
+            font-weight: bold;
+            font-size: 13px;
+            margin-bottom: 5px;
+        }
+        
+        .lesson-count {
+            font-size: 11px;
+            opacity: 0.7;
+        }
+        
+        .expand-icon {
+            font-size: 12px;
+            transition: transform 0.3s ease;
+            opacity: 0.7;
+        }
+        
+        .expand-icon.expanded {
+            transform: rotate(90deg);
+        }
+        
+        .lessons-list {
+            margin-top: 10px;
+            padding-left: 15px;
+            border-left: 2px solid rgba(255, 255, 255, 0.1);
+            display: none;
+            animation: slideDown 0.3s ease;
+        }
+        
+        .lessons-list.expanded {
+            display: block;
+        }
+        
+        .lesson-item {
+            background: rgba(255, 255, 255, 0.05);
+            margin: 3px 0;
+            padding: 6px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        
+        .lesson-status {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+        
+        .lesson-status.completed {
+            background: #4caf50;
+        }
+        
+        .lesson-status.incomplete {
+            background: rgba(255, 255, 255, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.5);
+        }
+        
+        .lesson-title {
+            flex-grow: 1;
+            line-height: 1.3;
+        }
+        
+        @keyframes slideDown {
+            from {
+                opacity: 0;
+                max-height: 0;
+            }
+            to {
+                opacity: 1;
+                max-height: 300px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>📚 Course Timer</h1>
+        <p>Teachable Course Analyzer</p>
+    </div>
+    
+    <div id="content">
+        <button id="analyzeBtn" class="button">🔍 Analyze Course</button>
+        
+        <div id="stats" class="stats-card" style="display: none;">
+            <div class="stat-row">
+                <span class="stat-label">Sections:</span>
+                <span class="stat-value" id="sectionCount">0</span>
+            </div>
+            <div class="stat-row">
+                <span class="stat-label">Lessons:</span>
+                <span class="stat-value" id="lessonCount">0</span>
+            </div>
+            <div class="stat-row">
+                <span class="stat-label">Total Time:</span>
+                <span class="stat-value total-time" id="totalTime">0 min</span>
+            </div>
+        </div>
+        
+        <div id="courseDetails" class="course-list" style="display: none;"></div>
+        
+        <button id="exportBtn" class="button" style="display: none;">📋 Copy Course Data</button>
+    </div>
+    
+    <script src="popup.js"></script>
+</body>
+</html>

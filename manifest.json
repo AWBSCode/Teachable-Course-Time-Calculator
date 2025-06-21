@@ -1,0 +1,31 @@
+{
+  "manifest_version": 3,
+  "name": "Teachable Course Timer",
+  "version": "1.0",
+  "description": "Extract course sections, lessons, and calculate total course time from Teachable platforms",
+  "permissions": [
+    "activeTab",
+    "scripting"
+  ],
+  "host_permissions": [
+    "*://*.teachable.com/*",
+    "*://*.thinkific.com/*",
+    "*://localhost/*"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Teachable Course Timer"
+  },
+  "content_scripts": [
+    {
+      "matches": ["*://*.teachable.com/*", "*://*.thinkific.com/*", "*://localhost/*"],
+      "js": ["content.js"],
+      "run_at": "document_end"
+    }
+  ],
+  "icons": {
+    "16": "icon16.png",
+    "48": "icon48.png",
+    "128": "icon128.png"
+  }
+}
