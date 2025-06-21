@@ -1,13 +1,13 @@
 function showSuccess(message) {
-        const successDiv = document.createElement('div');
-        successDiv.className = 'success';
-        successDiv.textContent = message;
-        document.getElementById('content').appendChild(successDiv);
-        
-        setTimeout(() => {
-            successDiv.remove();
-        }, 3000);
-    }
+    const successDiv = document.createElement('div');
+    successDiv.className = 'success';
+    successDiv.textContent = message;
+    document.getElementById('content').appendChild(successDiv);
+    
+    setTimeout(() => {
+        successDiv.remove();
+    }, 3000);
+}
 
 document.addEventListener('DOMContentLoaded', function() {
     const analyzeBtn = document.getElementById('analyzeBtn');
@@ -32,12 +32,8 @@ document.addEventListener('DOMContentLoaded', function() {
             const results = await chrome.scripting.executeScript({
                 target: { tabId: tab.id },
                 function: extractCourseData
-            }
-    
-            );
+            });
             
-
-
             courseData = results[0].result;
             
             if (courseData.error) {
@@ -56,12 +52,36 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     function displayResults(data) {
+        // Calculate completed and remaining time
+        let completedTime = 0;
+        let completedLessons = 0;
+        
+        data.sections.forEach(section => {
+            section.lessons.forEach(lesson => {
+                if (lesson.isComplete) {
+                    completedLessons++;
+                    completedTime += lesson.duration;
+                }
+            });
+        });
+        
+        const remainingTime = data.totalTimeMinutes - completedTime;
+        const progressPercent = data.totalTimeMinutes > 0 ? 
+            Math.round((completedTime / data.totalTimeMinutes) * 100) : 0;
+        
         // Update stats
         document.getElementById('sectionCount').textContent = data.sections.length;
         document.getElementById('lessonCount').textContent = data.totalLessons;
+        document.getElementById('completedLessonCount').textContent = completedLessons;
         document.getElementById('timedLessonCount').textContent = data.timedLessons;
         document.getElementById('totalTime').textContent = formatTime(Math.round(data.totalTimeMinutes));
-        document.getElementById('totalTimeMins').textContent = Math.round(data.totalTimeMinutes) + ' mins';
+        document.getElementById('completedTime').textContent = formatTime(Math.round(completedTime));
+        document.getElementById('remainingTime').textContent = formatTime(Math.round(remainingTime));
+        document.getElementById('progressPercent').textContent = `${progressPercent}%`;
+        
+        // Update progress bar
+        const progressFill = document.getElementById('progressFill');
+        progressFill.style.width = `${progressPercent}%`;
         
         // Show stats card
         statsDiv.style.display = 'block';
@@ -69,10 +89,19 @@ document.addEventListener('DOMContentLoaded', function() {
         // Display course details with expandable sections
         let detailsHTML = '';
         data.sections.forEach((section, sectionIndex) => {
-            const completedLessons = section.lessons.filter(lesson => lesson.isComplete).length;
+            const sectionCompletedLessons = section.lessons.filter(lesson => lesson.isComplete).length;
             const timedLessons = section.lessons.filter(lesson => lesson.duration > 0).length;
-            const progressText = completedLessons > 0 ? ` • ${completedLessons}/${section.lessons.length} completed` : '';
+            const sectionCompletedTime = section.lessons
+                .filter(lesson => lesson.isComplete)
+                .reduce((sum, lesson) => sum + lesson.duration, 0);
+            const sectionRemainingTime = section.actualTime - sectionCompletedTime;
+            const sectionProgress = section.actualTime > 0 ? 
+                Math.round((sectionCompletedTime / section.actualTime) * 100) : 0;
+            
+            const progressText = sectionCompletedLessons > 0 ? ` • ${sectionCompletedLessons}/${section.lessons.length} completed` : '';
             const timeText = section.actualTime > 0 ? formatTime(Math.round(section.actualTime)) : 'No timing info';
+            const completedTimeText = sectionCompletedTime > 0 ? ` • ✅ ${formatTime(Math.round(sectionCompletedTime))}` : '';
+            const remainingTimeText = sectionRemainingTime > 0 ? ` • ⏳ ${formatTime(Math.round(sectionRemainingTime))}` : '';
             
             detailsHTML += `
                 <div class="section-item" data-section-index="${sectionIndex}">
@@ -80,6 +109,9 @@ document.addEventListener('DOMContentLoaded', function() {
                         <div class="section-info">
                             <div class="section-title">${section.title}</div>
                             <div class="lesson-count">${section.lessons.length} lessons (${timedLessons} timed) • ${timeText}${progressText}</div>
+                            ${sectionCompletedTime > 0 || sectionRemainingTime > 0 ? 
+                                `<div class="section-progress">${sectionProgress}% complete${completedTimeText}${remainingTimeText}</div>` : 
+                                ''}
                         </div>
                         <div class="section-controls">
                             <button class="section-btn" onclick="copySectionData(${sectionIndex})" title="Copy section with details">📋 Data</button>
@@ -113,7 +145,9 @@ document.addEventListener('DOMContentLoaded', function() {
         
         const timingInfo = data.timedLessons < data.totalLessons ? 
             ` (${data.totalLessons - data.timedLessons} lessons without timing)` : '';
-        showSuccess(`Found ${data.sections.length} sections with ${data.totalLessons} lessons${timingInfo}!`);
+        const progressInfo = completedLessons > 0 ? 
+            ` • ${completedLessons} completed (${progressPercent}%)` : '';
+        showSuccess(`Found ${data.sections.length} sections with ${data.totalLessons} lessons${timingInfo}${progressInfo}!`);
     }
     
     function addSectionClickHandlers() {
@@ -152,26 +186,58 @@ document.addEventListener('DOMContentLoaded', function() {
     function exportCourseData() {
         if (!courseData) return;
         
+        // Calculate completed and remaining time for export
+        let completedTime = 0;
+        let completedLessons = 0;
+        
+        courseData.sections.forEach(section => {
+            section.lessons.forEach(lesson => {
+                if (lesson.isComplete) {
+                    completedLessons++;
+                    completedTime += lesson.duration;
+                }
+            });
+        });
+        
+        const remainingTime = courseData.totalTimeMinutes - completedTime;
+        const progressPercent = courseData.totalTimeMinutes > 0 ? 
+            Math.round((completedTime / courseData.totalTimeMinutes) * 100) : 0;
+        
         let exportText = `Course Analysis Report\n`;
         exportText += `========================\n\n`;
         exportText += `Total Sections: ${courseData.sections.length}\n`;
         exportText += `Total Lessons: ${courseData.totalLessons}\n`;
+        exportText += `Completed Lessons: ${completedLessons}\n`;
         exportText += `Timed Lessons: ${courseData.timedLessons}\n`;
-        exportText += `Total Actual Time: ${formatTime(Math.round(courseData.totalTimeMinutes))}\n`;
-        exportText += `Total Actual Time: ${Math.round(courseData.totalTimeMinutes)}\n`;
+        exportText += `Total Time: ${formatTime(Math.round(courseData.totalTimeMinutes))}\n`;
+        exportText += `Completed Time: ${formatTime(Math.round(completedTime))}\n`;
+        exportText += `Remaining Time: ${formatTime(Math.round(remainingTime))}\n`;
+        exportText += `Progress: ${progressPercent}%\n`;
         exportText += `Lessons Without Timing: ${courseData.totalLessons - courseData.timedLessons}\n\n`;
         
         exportText += `Section Details:\n`;
         exportText += `----------------\n`;
         
         courseData.sections.forEach((section, index) => {
-            const completedCount = section.lessons.filter(lesson => lesson.isComplete).length;
+            const sectionCompletedCount = section.lessons.filter(lesson => lesson.isComplete).length;
+            const sectionCompletedTime = section.lessons
+                .filter(lesson => lesson.isComplete)
+                .reduce((sum, lesson) => sum + lesson.duration, 0);
+            const sectionRemainingTime = section.actualTime - sectionCompletedTime;
+            const sectionProgress = section.actualTime > 0 ? 
+                Math.round((sectionCompletedTime / section.actualTime) * 100) : 0;
             const timedCount = section.lessons.filter(lesson => lesson.duration > 0).length;
-            const progressInfo = completedCount > 0 ? ` (${completedCount}/${section.lessons.length} completed)` : '';
+            const progressInfo = sectionCompletedCount > 0 ? ` (${sectionCompletedCount}/${section.lessons.length} completed - ${sectionProgress}%)` : '';
             
             exportText += `\n${index + 1}. ${section.title}${progressInfo}\n`;
             exportText += `   Total Lessons: ${section.lessons.length} (${timedCount} timed)\n`;
-            exportText += `   Actual Time: ${section.actualTime > 0 ? formatTime(section.actualTime.toFixed(2)) : 'No timing info'}\n`;
+            exportText += `   Total Time: ${section.actualTime > 0 ? formatTime(section.actualTime.toFixed(2)) : 'No timing info'}\n`;
+            if (sectionCompletedTime > 0) {
+                exportText += `   Completed Time: ${formatTime(sectionCompletedTime.toFixed(2))}\n`;
+            }
+            if (sectionRemainingTime > 0) {
+                exportText += `   Remaining Time: ${formatTime(sectionRemainingTime.toFixed(2))}\n`;
+            }
             exportText += `   Lessons:\n`;
             section.lessons.forEach((lesson, lessonIndex) => {
                 const status = lesson.isComplete ? '✅' : '⏳';
@@ -219,14 +285,26 @@ document.addEventListener('DOMContentLoaded', function() {
         const section = courseData.sections[sectionIndex];
         const completedCount = section.lessons.filter(lesson => lesson.isComplete).length;
         const timedLessons = section.lessons.filter(lesson => lesson.duration > 0).length;
+        const completedTime = section.lessons
+            .filter(lesson => lesson.isComplete)
+            .reduce((sum, lesson) => sum + lesson.duration, 0);
+        const remainingTime = section.actualTime - completedTime;
+        const progressPercent = section.actualTime > 0 ? 
+            Math.round((completedTime / section.actualTime) * 100) : 0;
         
         let sectionText = `Section: ${section.title}\n`;
         sectionText += `==========================================\n`;
         sectionText += `Total Lessons: ${section.lessons.length}\n`;
         sectionText += `Timed Lessons: ${timedLessons}\n`;
         sectionText += `Completed: ${completedCount}/${section.lessons.length}\n`;
-        sectionText += `Actual Time: ${section.actualTime > 0 ? formatTime(section.actualTime) : 'No timing info'}\n`;
-        sectionText += `Progress: ${Math.round((completedCount / section.lessons.length) * 100)}%\n\n`;
+        sectionText += `Total Time: ${section.actualTime > 0 ? formatTime(section.actualTime) : 'No timing info'}\n`;
+        if (completedTime > 0) {
+            sectionText += `Completed Time: ${formatTime(completedTime)}\n`;
+        }
+        if (remainingTime > 0) {
+            sectionText += `Remaining Time: ${formatTime(remainingTime)}\n`;
+        }
+        sectionText += `Progress: ${progressPercent}%\n\n`;
         
         sectionText += `Lesson Details:\n`;
         sectionText += `---------------\n`;
@@ -248,7 +326,8 @@ document.addEventListener('DOMContentLoaded', function() {
         titlesText += `${'='.repeat(section.title.length + 18)}\n`;
         
         section.lessons.forEach((lesson, index) => {
-            titlesText += `${index + 1}. ${lesson.title}\n`;
+            const status = lesson.isComplete ? '✅ ' : '';
+            titlesText += `${status}${index + 1}. ${lesson.title}\n`;
         });
         
         copyToClipboard(titlesText, sectionIndex, 'titles');
@@ -328,7 +407,9 @@ function extractCourseData() {
                     const fullLessonTitle = lessonNameElement.textContent.trim();
                     const isComplete = lessonElement.classList.contains('completed') || 
                                      lessonElement.classList.contains('complete') ||
-                                     lessonElement.querySelector('.completed') !== null;
+                                     lessonElement.querySelector('.completed') !== null ||
+                                     lessonElement.querySelector('.fa-check') !== null ||
+                                     lessonElement.querySelector('[class*="check"]') !== null;
                     
                     // Parse time from title
                     const duration = parseTimeFromTitle(fullLessonTitle);
