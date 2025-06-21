@@ -135,7 +135,45 @@
         .section-header {
             display: flex;
             justify-content: space-between;
+            align-items: flex-start;
+            gap: 10px;
+        }
+        
+        .section-info {
+            flex-grow: 1;
+        }
+        
+        .section-controls {
+            display: flex;
             align-items: center;
+            gap: 5px;
+            flex-shrink: 0;
+        }
+        
+        .section-btn {
+            background: rgba(255, 255, 255, 0.15);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            color: white;
+            border-radius: 4px;
+            padding: 4px 6px;
+            font-size: 10px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            white-space: nowrap;
+        }
+        
+        .section-btn:hover {
+            background: rgba(255, 255, 255, 0.25);
+            transform: translateY(-1px);
+        }
+        
+        .section-btn:active {
+            transform: translateY(0);
+        }
+        
+        .section-btn.success {
+            background: rgba(76, 175, 80, 0.3);
+            border-color: rgba(76, 175, 80, 0.5);
         }
         
         .section-title {
@@ -230,12 +268,20 @@
                 <span class="stat-value" id="sectionCount">0</span>
             </div>
             <div class="stat-row">
-                <span class="stat-label">Lessons:</span>
+                <span class="stat-label">Total Lessons:</span>
                 <span class="stat-value" id="lessonCount">0</span>
+            </div>
+            <div class="stat-row">
+                <span class="stat-label">Timed Lessons:</span>
+                <span class="stat-value" id="timedLessonCount">0</span>
             </div>
             <div class="stat-row">
                 <span class="stat-label">Total Time:</span>
                 <span class="stat-value total-time" id="totalTime">0 min</span>
+            </div>
+            <div class="stat-row">
+                <span class="stat-label">Total Time (Minutes):</span>
+                <span class="stat-value total-time" id="totalTimeMins">0 min</span>
             </div>
         </div>
         

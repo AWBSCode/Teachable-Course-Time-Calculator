@@ -1,3 +1,14 @@
+function showSuccess(message) {
+        const successDiv = document.createElement('div');
+        successDiv.className = 'success';
+        successDiv.textContent = message;
+        document.getElementById('content').appendChild(successDiv);
+        
+        setTimeout(() => {
+            successDiv.remove();
+        }, 3000);
+    }
+
 document.addEventListener('DOMContentLoaded', function() {
     const analyzeBtn = document.getElementById('analyzeBtn');
     const exportBtn = document.getElementById('exportBtn');
@@ -21,8 +32,12 @@ document.addEventListener('DOMContentLoaded', function() {
             const results = await chrome.scripting.executeScript({
                 target: { tabId: tab.id },
                 function: extractCourseData
-            });
+            }
+    
+            );
             
+
+
             courseData = results[0].result;
             
             if (courseData.error) {
@@ -44,7 +59,9 @@ document.addEventListener('DOMContentLoaded', function() {
         // Update stats
         document.getElementById('sectionCount').textContent = data.sections.length;
         document.getElementById('lessonCount').textContent = data.totalLessons;
-        document.getElementById('totalTime').textContent = formatTime(data.totalTimeMinutes);
+        document.getElementById('timedLessonCount').textContent = data.timedLessons;
+        document.getElementById('totalTime').textContent = formatTime(Math.round(data.totalTimeMinutes));
+        document.getElementById('totalTimeMins').textContent = Math.round(data.totalTimeMinutes) + ' mins';
         
         // Show stats card
         statsDiv.style.display = 'block';
@@ -53,22 +70,28 @@ document.addEventListener('DOMContentLoaded', function() {
         let detailsHTML = '';
         data.sections.forEach((section, sectionIndex) => {
             const completedLessons = section.lessons.filter(lesson => lesson.isComplete).length;
+            const timedLessons = section.lessons.filter(lesson => lesson.duration > 0).length;
             const progressText = completedLessons > 0 ? ` • ${completedLessons}/${section.lessons.length} completed` : '';
+            const timeText = section.actualTime > 0 ? formatTime(Math.round(section.actualTime)) : 'No timing info';
             
             detailsHTML += `
                 <div class="section-item" data-section-index="${sectionIndex}">
                     <div class="section-header">
-                        <div>
+                        <div class="section-info">
                             <div class="section-title">${section.title}</div>
-                            <div class="lesson-count">${section.lessons.length} lessons • ${formatTime(section.estimatedTime)} estimated${progressText}</div>
+                            <div class="lesson-count">${section.lessons.length} lessons (${timedLessons} timed) • ${timeText}${progressText}</div>
                         </div>
-                        <div class="expand-icon">▶</div>
+                        <div class="section-controls">
+                            <button class="section-btn" onclick="copySectionData(${sectionIndex})" title="Copy section with details">📋 Data</button>
+                            <button class="section-btn" onclick="copySectionTitles(${sectionIndex})" title="Copy lesson titles only">📝 Titles</button>
+                            <div class="expand-icon">▶</div>
+                        </div>
                     </div>
                     <div class="lessons-list" id="lessons-${sectionIndex}">
                         ${section.lessons.map(lesson => `
                             <div class="lesson-item">
                                 <div class="lesson-status ${lesson.isComplete ? 'completed' : 'incomplete'}"></div>
-                                <div class="lesson-title">${lesson.title}</div>
+                                <div class="lesson-title">${lesson.title}${lesson.duration > 0 ? ` <span style="opacity: 0.7; font-size: 10px;">(${formatTime(Math.round(lesson.duration))})</span>` : ''}</div>
                             </div>
                         `).join('')}
                     </div>
@@ -82,9 +105,15 @@ document.addEventListener('DOMContentLoaded', function() {
         // Add click handlers for section expansion
         addSectionClickHandlers();
         
+        // Make copy functions available globally
+        window.copySectionData = copySectionData;
+        window.copySectionTitles = copySectionTitles;
+        
         exportBtn.style.display = 'block';
         
-        showSuccess(`Found ${data.sections.length} sections with ${data.totalLessons} lessons!`);
+        const timingInfo = data.timedLessons < data.totalLessons ? 
+            ` (${data.totalLessons - data.timedLessons} lessons without timing)` : '';
+        showSuccess(`Found ${data.sections.length} sections with ${data.totalLessons} lessons${timingInfo}!`);
     }
     
     function addSectionClickHandlers() {
@@ -97,6 +126,11 @@ document.addEventListener('DOMContentLoaded', function() {
             const expandIcon = sectionItem.querySelector('.expand-icon');
             
             header.addEventListener('click', (e) => {
+                // Don't expand if clicking on buttons
+                if (e.target.classList.contains('section-btn')) {
+                    return;
+                }
+                
                 e.preventDefault();
                 
                 // Toggle the lessons list
@@ -122,22 +156,29 @@ document.addEventListener('DOMContentLoaded', function() {
         exportText += `========================\n\n`;
         exportText += `Total Sections: ${courseData.sections.length}\n`;
         exportText += `Total Lessons: ${courseData.totalLessons}\n`;
-        exportText += `Estimated Total Time: ${formatTime(courseData.totalTimeMinutes)}\n\n`;
+        exportText += `Timed Lessons: ${courseData.timedLessons}\n`;
+        exportText += `Total Actual Time: ${formatTime(Math.round(courseData.totalTimeMinutes))}\n`;
+        exportText += `Total Actual Time: ${Math.round(courseData.totalTimeMinutes)}\n`;
+        exportText += `Lessons Without Timing: ${courseData.totalLessons - courseData.timedLessons}\n\n`;
         
         exportText += `Section Details:\n`;
         exportText += `----------------\n`;
         
         courseData.sections.forEach((section, index) => {
             const completedCount = section.lessons.filter(lesson => lesson.isComplete).length;
+            const timedCount = section.lessons.filter(lesson => lesson.duration > 0).length;
             const progressInfo = completedCount > 0 ? ` (${completedCount}/${section.lessons.length} completed)` : '';
             
             exportText += `\n${index + 1}. ${section.title}${progressInfo}\n`;
-            exportText += `   Lessons (${section.lessons.length}):\n`;
+            exportText += `   Total Lessons: ${section.lessons.length} (${timedCount} timed)\n`;
+            exportText += `   Actual Time: ${section.actualTime > 0 ? formatTime(section.actualTime.toFixed(2)) : 'No timing info'}\n`;
+            exportText += `   Lessons:\n`;
             section.lessons.forEach((lesson, lessonIndex) => {
                 const status = lesson.isComplete ? '✅' : '⏳';
-                exportText += `   ${status} ${lessonIndex + 1}. ${lesson.title}\n`;
+                const timeInfo = lesson.duration > 0 ? ` (${formatTime(lesson.duration.toFixed(2))})` : '';
+                exportText += `   ${status} ${lessonIndex + 1}. ${lesson.title}${timeInfo}\n`;
             });
-            exportText += `   Estimated Time: ${formatTime(section.estimatedTime)}\n`;
+            exportText += `\n`;
         });
         
         // Copy to clipboard
@@ -172,15 +213,66 @@ document.addEventListener('DOMContentLoaded', function() {
         }, 5000);
     }
     
-    function showSuccess(message) {
-        const successDiv = document.createElement('div');
-        successDiv.className = 'success';
-        successDiv.textContent = message;
-        document.getElementById('content').appendChild(successDiv);
+    function copySectionData(sectionIndex) {
+        if (!courseData || !courseData.sections[sectionIndex]) return;
         
-        setTimeout(() => {
-            successDiv.remove();
-        }, 3000);
+        const section = courseData.sections[sectionIndex];
+        const completedCount = section.lessons.filter(lesson => lesson.isComplete).length;
+        const timedLessons = section.lessons.filter(lesson => lesson.duration > 0).length;
+        
+        let sectionText = `Section: ${section.title}\n`;
+        sectionText += `==========================================\n`;
+        sectionText += `Total Lessons: ${section.lessons.length}\n`;
+        sectionText += `Timed Lessons: ${timedLessons}\n`;
+        sectionText += `Completed: ${completedCount}/${section.lessons.length}\n`;
+        sectionText += `Actual Time: ${section.actualTime > 0 ? formatTime(section.actualTime) : 'No timing info'}\n`;
+        sectionText += `Progress: ${Math.round((completedCount / section.lessons.length) * 100)}%\n\n`;
+        
+        sectionText += `Lesson Details:\n`;
+        sectionText += `---------------\n`;
+        section.lessons.forEach((lesson, index) => {
+            const status = lesson.isComplete ? '✅' : '⏳';
+            const timeInfo = lesson.duration > 0 ? ` (${formatTime(lesson.duration)})` : '';
+            sectionText += `${status} ${index + 1}. ${lesson.title}${timeInfo}\n`;
+        });
+        
+        copyToClipboard(sectionText, sectionIndex, 'data');
+    }
+    
+    function copySectionTitles(sectionIndex) {
+        if (!courseData || !courseData.sections[sectionIndex]) return;
+        
+        const section = courseData.sections[sectionIndex];
+        
+        let titlesText = `${section.title} - Lesson Titles:\n`;
+        titlesText += `${'='.repeat(section.title.length + 18)}\n`;
+        
+        section.lessons.forEach((lesson, index) => {
+            titlesText += `${index + 1}. ${lesson.title}\n`;
+        });
+        
+        copyToClipboard(titlesText, sectionIndex, 'titles');
+    }
+    
+    function copyToClipboard(text, sectionIndex, type) {
+        navigator.clipboard.writeText(text).then(() => {
+            // Find the button that was clicked and show success state
+            const buttons = document.querySelectorAll(`[data-section-index="${sectionIndex}"] .section-btn`);
+            const targetButton = type === 'data' ? buttons[0] : buttons[1];
+            
+            if (targetButton) {
+                const originalText = targetButton.textContent;
+                targetButton.textContent = '✅ Copied!';
+                targetButton.classList.add('success');
+                
+                setTimeout(() => {
+                    targetButton.textContent = originalText;
+                    targetButton.classList.remove('success');
+                }, 2000);
+            }
+        }).catch(() => {
+            showError('Failed to copy to clipboard');
+        });
     }
 });
 
@@ -190,6 +282,7 @@ function extractCourseData() {
         const sections = [];
         let totalLessons = 0;
         let totalTimeMinutes = 0;
+        let timedLessons = 0;
         
         // Find all course sections
         const sectionElements = document.querySelectorAll('.course-section');
@@ -200,12 +293,31 @@ function extractCourseData() {
             };
         }
         
+        // Helper function to parse time from title format: "TITLE (MM:SS)"
+        function parseTimeFromTitle(title) {
+            const timeRegex = /\((\d{1,2}):(\d{2})\)$/;
+            const match = title.match(timeRegex);
+            
+            if (match) {
+                const minutes = parseInt(match[1], 10);
+                const seconds = parseInt(match[2], 10);
+                return minutes + (seconds / 60); // Convert to decimal minutes
+            }
+            return 0;
+        }
+        
+        // Helper function to clean title by removing time format
+        function cleanTitle(title) {
+            return title.replace(/\s*\(\d{1,2}:\d{2}\)$/, '').trim();
+        }
+        
         sectionElements.forEach(sectionElement => {
             const sectionTitleElement = sectionElement.querySelector('.section-title');
             if (!sectionTitleElement) return;
             
             const sectionTitle = sectionTitleElement.textContent.trim();
             const lessons = [];
+            let sectionTime = 0;
             
             // Find all lessons in this section
             const lessonElements = sectionElement.querySelectorAll('.section-item');
@@ -213,13 +325,24 @@ function extractCourseData() {
             lessonElements.forEach(lessonElement => {
                 const lessonNameElement = lessonElement.querySelector('.lecture-name');
                 if (lessonNameElement) {
-                    const lessonTitle = lessonNameElement.textContent.trim();
+                    const fullLessonTitle = lessonNameElement.textContent.trim();
                     const isComplete = lessonElement.classList.contains('completed') || 
                                      lessonElement.classList.contains('complete') ||
                                      lessonElement.querySelector('.completed') !== null;
                     
+                    // Parse time from title
+                    const duration = parseTimeFromTitle(fullLessonTitle);
+                    const cleanedTitle = cleanTitle(fullLessonTitle);
+                    
+                    if (duration > 0) {
+                        timedLessons++;
+                        sectionTime += duration;
+                    }
+                    
                     lessons.push({
-                        title: lessonTitle,
+                        title: cleanedTitle,
+                        fullTitle: fullLessonTitle,
+                        duration: duration, // in minutes
                         id: lessonElement.getAttribute('data-lecture-id'),
                         url: lessonElement.getAttribute('data-lecture-url'),
                         isComplete: isComplete
@@ -227,22 +350,21 @@ function extractCourseData() {
                 }
             });
             
-            // Estimate time per lesson (average 10 minutes per lesson)
-            const estimatedTime = lessons.length * 10;
-            
             sections.push({
                 title: sectionTitle,
                 lessons: lessons,
-                estimatedTime: estimatedTime
+                actualTime: sectionTime, // Actual time based on lesson durations
+                estimatedTime: lessons.length * 10 // Keep old estimation for fallback
             });
             
             totalLessons += lessons.length;
-            totalTimeMinutes += estimatedTime;
+            totalTimeMinutes += sectionTime;
         });
         
         return {
             sections: sections,
             totalLessons: totalLessons,
+            timedLessons: timedLessons,
             totalTimeMinutes: totalTimeMinutes,
             extractedAt: new Date().toISOString(),
             pageUrl: window.location.href
