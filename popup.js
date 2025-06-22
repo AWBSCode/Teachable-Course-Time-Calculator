@@ -35,6 +35,7 @@ function showError(message) {
 document.addEventListener('DOMContentLoaded', function() {
     const analyzeBtn = document.getElementById('analyzeBtn');
     const exportBtn = document.getElementById('exportBtn');
+    const todayLessonsBtn = document.getElementById('todayLessonsBtn');
     const statsDiv = document.getElementById('stats');
     const courseDetailsDiv = document.getElementById('courseDetails');
     const targetCard = document.getElementById('targetCard');
@@ -61,6 +62,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // Event listeners
     analyzeBtn.addEventListener('click', analyzeCourse);
     exportBtn.addEventListener('click', exportCourseData);
+    todayLessonsBtn.addEventListener('click', copyTodayLessons);
     targetToggle.addEventListener('click', toggleTargetSettings);
     dailyTargetInput.addEventListener('input', updateDailyTarget);
     dailyTargetInput.addEventListener('change', updateDailyTarget);
@@ -137,6 +139,117 @@ document.addEventListener('DOMContentLoaded', function() {
         document.getElementById('dailyNeeded').textContent = `${Math.ceil(remainingTime / daysToComplete)} min`;
         document.getElementById('weeklyHours').textContent = `${weeklyHours.toFixed(1)}h`;
         document.getElementById('completionDate').textContent = completionDate.toLocaleDateString();
+    }
+    
+    function getTodayLessons() {
+        if (!courseData) return null;
+        
+        const todayLessons = [];
+        let targetTimeRemaining = dailyTarget;
+        
+        // Find incomplete lessons in order
+        for (const section of courseData.sections) {
+            for (const lesson of section.lessons) {
+                if (!lesson.isComplete && targetTimeRemaining > 0) {
+                    const lessonDuration = lesson.duration || 0;
+                    
+                    // If lesson has no duration, estimate it or include it anyway
+                    if (lessonDuration === 0) {
+                        // Include lessons without timing (user can decide)
+                        todayLessons.push({
+                            ...lesson,
+                            sectionTitle: section.title,
+                            estimatedDuration: 5 // Estimate 5 minutes for untimed lessons
+                        });
+                        targetTimeRemaining -= 5;
+                    } else if (lessonDuration <= targetTimeRemaining) {
+                        // Lesson fits in remaining time
+                        todayLessons.push({
+                            ...lesson,
+                            sectionTitle: section.title
+                        });
+                        targetTimeRemaining -= lessonDuration;
+                    } else if (todayLessons.length === 0) {
+                        // If no lessons added yet and this lesson exceeds daily target,
+                        // include it anyway (better than nothing)
+                        todayLessons.push({
+                            ...lesson,
+                            sectionTitle: section.title,
+                            exceedsTarget: true
+                        });
+                        targetTimeRemaining = 0;
+                    } else {
+                        // Stop here as adding this lesson would exceed the target
+                        break;
+                    }
+                }
+                
+                if (targetTimeRemaining <= 0) break;
+            }
+            if (targetTimeRemaining <= 0) break;
+        }
+        
+        return {
+            lessons: todayLessons,
+            totalTime: dailyTarget - targetTimeRemaining,
+            targetTime: dailyTarget,
+            timeRemaining: Math.max(0, targetTimeRemaining)
+        };
+    }
+    
+    function copyTodayLessons() {
+        if (!courseData) {
+            showError('Please analyze the course first');
+            return;
+        }
+        
+        const todayData = getTodayLessons();
+        
+        if (!todayData || todayData.lessons.length === 0) {
+            showError('No incomplete lessons found or course is already complete!');
+            return;
+        }
+        
+        const today = new Date().toLocaleDateString();
+        let todayText = `📚 Today's Study Plan - ${today}\n`;
+
+        //if (todayData.timeRemaining > 0) {
+        //    todayText += `⏳ Time Remaining: ${Math.round(todayData.timeRemaining)} minutes\n`;
+        //}
+        
+        todayText += `📖 Lessons to Complete: ${todayData.lessons.length}\n\n`;
+        
+        todayText += `Lesson List:\n`;
+        todayText += `-----------\n`;
+        
+        let currentSection = '';
+        todayData.lessons.forEach((lesson, index) => {
+            // Add section header if it's a new section
+            if (lesson.sectionTitle !== currentSection) {
+                currentSection = lesson.sectionTitle;
+                todayText += `\n📁 ${currentSection}\n`;
+            }
+            
+            const timeInfo = lesson.duration > 0 ? 
+                ` (${formatTime(Math.round(lesson.duration))})` : 
+                lesson.estimatedDuration ? ` (~${lesson.estimatedDuration} min)` : '';
+            
+            const exceedsNote = lesson.exceedsTarget ? ' 🔥 Exceeds daily target' : '';
+            
+            todayText += `- [ ] ${index + 1}. ${lesson.title}${timeInfo}${exceedsNote}\n`;
+        });
+        
+        
+        navigator.clipboard.writeText(todayText).then(() => {
+            todayLessonsBtn.textContent = '✅ Copied!';
+            setTimeout(() => {
+                todayLessonsBtn.textContent = '📚 Copy Today\'s Lessons';
+            }, 2000);
+            
+            showSuccess(`Copied ${todayData.lessons.length} lessons for today (${Math.round(todayData.totalTime)} min)`);
+        }).catch(() => {
+            showError('Failed to copy to clipboard');
+        });
     }
     
     async function analyzeCourse() {
@@ -241,6 +354,7 @@ document.addEventListener('DOMContentLoaded', function() {
         displayCourseDetails(data);
         
         exportBtn.style.display = 'block';
+        todayLessonsBtn.style.display = 'block';
         
         const timingInfo = data.timedLessons < data.totalLessons ? 
             ` (${data.totalLessons - data.timedLessons} lessons without timing)` : '';
@@ -309,6 +423,7 @@ document.addEventListener('DOMContentLoaded', function() {
         window.copySectionTitles = copySectionTitles;
         
         exportBtn.style.display = 'block';
+        todayLessonsBtn.style.display = 'block';
         
         const timingInfo = data.timedLessons < data.totalLessons ? 
             ` (${data.totalLessons - data.timedLessons} lessons without timing)` : '';
