@@ -73,7 +73,10 @@ function showError(message) {
         let dailyTarget = 30; // Default 30 minutes per day
         
         // Load saved daily target if available
-        if (typeof chrome !== 'undefined' && chrome.storage) {
+        if (typeof localStorage !== 'undefined' && localStorage.getItem('dailyTarget')) {
+            dailyTarget = parseInt(localStorage.getItem('dailyTarget')) || 30;
+            dailyTargetInput.value = dailyTarget;
+        } else if (typeof chrome !== 'undefined' && chrome.storage) {
             chrome.storage.local.get(['dailyTarget']).then(function(result) {
                 if (result.dailyTarget) {
                     dailyTarget = result.dailyTarget;
@@ -112,6 +115,9 @@ function showError(message) {
             dailyTarget = Math.max(1, Math.min(1440, newTarget)); // Clamp between 1 and 1440
             if (dailyTargetInput.value != dailyTarget) {
                 dailyTargetInput.value = dailyTarget;
+            }
+            if (typeof localStorage !== 'undefined') {
+                localStorage.setItem('dailyTarget', dailyTarget);
             }
             if (typeof chrome !== 'undefined' && chrome.storage) {
                 chrome.storage.local.set({dailyTarget: dailyTarget}).catch(function(error) {
